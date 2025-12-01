@@ -1,18 +1,45 @@
 // 是否使用假数据（后端 API 完成后可以改 false）
 const USE_MOCK = true;
 
-// 假数据，模拟后端返回的结构
-const mockData = [
-  { itemName: "Spam", price: 3.50, website: "amazon.com",  timestamp: "2025-11-18T12:00:00Z" },
-  { itemName: "Spam", price: 3.40, website: "walmart.com", timestamp: "2025-11-18T12:05:00Z" },
-  { itemName: "Spam", price: 3.60, website: "amazon.com",  timestamp: "2025-11-18T06:00:00Z" },
-  { itemName: "Spam", price: 3.55, website: "walmart.com", timestamp: "2025-11-18T06:00:00Z" }
-];
+
+// 初始价格
+let basePrices = {
+  "amazon.com": 3.50,
+  "walmart.com": 3.40
+};
+
+// 历史记录（开始为空）
+let mockData = [];
+// 每次生成新的价格（随机上涨或下跌）
+function generateFakeData() {
+  const now = new Date().toISOString();
+
+  // 让每个网站价格上下浮动 3%
+  Object.keys(basePrices).forEach(site => {
+    const change = Math.random() * 0.06 - 0.03; // -3% ~ +3%
+    basePrices[site] = parseFloat((basePrices[site] * (1 + change)).toFixed(2));
+  });
+
+  return [
+    { itemName: "Spam", price: basePrices["amazon.com"], website: "amazon.com", timestamp: now },
+    { itemName: "Spam", price: basePrices["walmart.com"], website: "walmart.com", timestamp: now }
+  ];
+}
+
 
 async function loadPrices() {
 
-  // Step 1: 选择数据来源（现在用 mock）
-  let data = mockData;
+  // Step 1: 每次生成新的价格并加入历史
+const newRows = generateFakeData();   // 本次最新价格（2条）
+mockData = mockData.concat(newRows);  // 添加到历史记录中
+
+// 可选：最多保留最近 50 条数据（避免太长）
+if (mockData.length > 50) {
+  mockData = mockData.slice(mockData.length - 50);
+}
+
+let data = mockData;  // 用全部历史记录渲染界面
+
 
   // Step 2: 填充历史价格表格
   const tbody = document.querySelector("#history-table tbody");
@@ -61,5 +88,9 @@ async function loadPrices() {
     "Dashboard refreshed at: " + new Date().toISOString();
 }
 
-// 页面加载后自动运行 loadPrices()
-document.addEventListener("DOMContentLoaded", loadPrices);
+document.addEventListener("DOMContentLoaded", () => {
+  loadPrices();                      // 先跑一次
+  setInterval(loadPrices, 20000);    // 之后每 20 秒跑一次
+});
+
+
