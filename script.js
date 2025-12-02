@@ -28,26 +28,42 @@ function generateFakeData() {
 
 
 async function loadPrices() {
-
   // Step 1: 每次生成新的价格并加入历史
-const newRows = generateFakeData();   // 本次最新价格（2条）
-mockData = mockData.concat(newRows);  // 添加到历史记录中
+  const newRows = generateFakeData();
+  mockData = mockData.concat(newRows);
 
-// 可选：最多保留最近 50 条数据（避免太长）
-if (mockData.length > 50) {
-  mockData = mockData.slice(mockData.length - 50);
-}
+  // 可选：限制历史记录长度
+  if (mockData.length > 50) {
+    mockData = mockData.slice(mockData.length - 50);
+  }
 
-let data = mockData;  // 用全部历史记录渲染界面
+  // ⭐⭐ NEW：把新生成的价格发给你队友的 Python API
+  for (const row of newRows) {
+    try {
+      await fetch("/api/AddVendorItem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: row.itemName,
+          price: row.price,
+          store: row.website
+        })
+      });
+      console.log(`Sent ${row.website} price to Azure DB`);
+    } catch (error) {
+      console.error("Error sending to Azure:", error);
+    }
+  }
 
+  const data = mockData;
 
   // Step 2: 填充历史价格表格
   const tbody = document.querySelector("#history-table tbody");
-  tbody.innerHTML = ""; // 清空旧内容
+  tbody.innerHTML = "";
 
   data
     .slice()
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)) // 按时间从新到旧排序
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     .forEach(row => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -83,14 +99,17 @@ let data = mockData;  // 用全部历史记录渲染界面
     `;
   });
 
+  // （如果你有 Featured Product，这里顺便同步 price-tag）
+
   // Step 5: 刷新时间
   document.getElementById("last-updated").textContent =
     "Dashboard refreshed at: " + new Date().toISOString();
 }
 
+
 document.addEventListener("DOMContentLoaded", () => {
   loadPrices();                      // 先跑一次
-  setInterval(loadPrices, 20000);    // 之后每 20 秒跑一次
+  setInterval(loadPrices, 30000);    // 之后每 30 秒跑一次
 });
 
 
