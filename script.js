@@ -1,131 +1,206 @@
 // 是否使用假数据（后端 API 完成后可以改 false）
 const USE_MOCK = true;
 
-// 1. SETUP: Define your Azure Function URL
-// If running locally, use https://storestorageproject.z13.web.core.windows.net/vendor.html
-// If deployed to Azure, use your real https://<app-name>.azurewebsites.net/api/AddVendorItem
+// Azure 后端 API URL
 const AZURE_API_URL = "https://storestorageproject.z13.web.core.windows.net/vendor.html";
 
-// 初始价格
-let basePrices = {
-  "amazon.com": 3.50,
-  "walmart.com": 3.40
+// 我们要展示的 4 个商品
+const PRODUCTS = ["Spam", "Eggs", "Milk", "Bread"];
+
+// 对应的 UI 展示名称
+const PRODUCT_LABELS = {
+  Spam: "SPAM Classic",
+  Eggs: "Large Eggs (Dozen)",
+  Milk: "Whole Milk (1 Gallon)",
+  Bread: "White Bread Loaf",
 };
 
-// 历史记录（开始为空）
+// 商品图片（可以以后换成你自己的）
+const PRODUCT_IMAGES = {
+  Spam: "https://www.spam.com/wp-content/uploads/2019/08/image-product_spam-classic-7oz.png",
+  Eggs: "https://media.istockphoto.com/id/104121932/photo/dozen-eggs.jpg?s=612x612&w=0&k=20&c=4V9zUEtMF3CtYH0WsyjYlAXVyyyjFIk9YWel2Eul-WU=",
+  Milk: "https://i5.walmartimages.com/asr/274213e9-d32e-4d87-ba4f-fc22e08bfea4_1.81c26ad2bb3ab0ca92ba1add575f61f4.jpeg?odnHeight=450&odnWidth=450&odnBg=FFFFFF",
+  Bread: "https://heartscontentfarmhouse.com/wp-content/uploads/2023/01/recipe-card-amish-white-bread.jpg",
+};
+
+// 初始价格：4 个商品 × 2 个网站
+let basePrices = {
+  "amazon.com": {
+    Spam: 3.5,
+    Eggs: 4.99,
+    Milk: 4.29,
+    Bread: 2.49,
+  },
+  "walmart.com": {
+    Spam: 2.98,
+    Eggs: 5.24,
+    Milk: 3.98,
+    Bread: 2.19,
+  },
+};
+
+// 历史记录
 let mockData = [];
 
-// 每次生成新的价格（随机上涨或下跌）
+// 随机波动生成新价格
 function generateFakeData() {
   const now = new Date().toISOString();
+  const rows = [];
 
-  // 让每个网站价格上下浮动 3%
-  Object.keys(basePrices).forEach(site => {
-    const change = Math.random() * 0.06 - 0.03; // -3% ~ +3%
-    basePrices[site] = parseFloat((basePrices[site] * (1 + change)).toFixed(2));
+  Object.keys(basePrices).forEach((site) => {
+    PRODUCTS.forEach((product) => {
+      const currentPrice = basePrices[site][product];
+      const change = Math.random() * 0.06 - 0.03; // -3% ~ +3%
+      const newPrice = parseFloat((currentPrice * (1 + change)).toFixed(2));
+
+      basePrices[site][product] = newPrice;
+
+      rows.push({
+        itemName: product,
+        price: newPrice,
+        website: site,
+        timestamp: now,
+      });
+    });
   });
 
-  return [
-    { itemName: "Spam", price: basePrices["amazon.com"], website: "amazon.com", timestamp: now },
-    { itemName: "Spam", price: basePrices["walmart.com"], website: "walmart.com", timestamp: now }
-  ];
+  return rows; // 每次 8 条
 }
 
-// --- NEW HELPER FUNCTION: Send data to Python Backend ---
+// 把一条记录发给 Azure 后端
 async function uploadPriceToAzure(item) {
   try {
     const response = await fetch(AZURE_API_URL, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
-      // Map the JS object keys to what your Python function expects (name, price, store)
       body: JSON.stringify({
         name: item.itemName,
         price: item.price,
-        store: item.website
-      })
+        store: item.website,
+      }),
     });
 
     if (response.ok) {
-      console.log(`✅ Saved ${item.website} ($${item.price}) to Azure DB`);
+      console.log(`✅ Saved ${item.website} ${item.itemName} ($${item.price}) to Azure DB`);
     } else {
-      console.warn(`⚠️ Failed to save to DB: ${response.statusText}`);
+      console.warn(`⚠️ Failed to save to DB: ${response.status} ${response.statusText}`);
     }
   } catch (error) {
     console.error("❌ Error connecting to Azure API:", error);
-    console.error("Did you enable CORS in local.settings.json?");
   }
 }
 
+function formatTime(isoString) {
+  const d = new Date(isoString);
+  return d.toISOString().replace("T", " ").replace("Z", " UTC");
+}
+
 async function loadPrices() {
+  // Step 1: 生成新价格
+  const newRows = generateFakeData();
+  mockData = mockData.concat(newRows);
 
-  // Step 1: 每次生成新的价格并加入历史
-  const newRows = generateFakeData();   // 本次最新价格（2条）
-  mockData = mockData.concat(newRows);  // 添加到历史记录中
+  // 把新生成的记录发到后端
+  newRows.forEach((row) => uploadPriceToAzure(row));
 
-  // --- NEW LOGIC: Send these new rows to the database ---
-  newRows.forEach(row => {
-      uploadPriceToAzure(row);
-  });
-  // ----------------------------------------------------
-
-  // 可选：最多保留最近 50 条数据（避免太长）
-  if (mockData.length > 50) {
-    mockData = mockData.slice(mockData.length - 50);
+  // 历史记录最多保留 80 条
+  if (mockData.length > 80) {
+    mockData = mockData.slice(mockData.length - 80);
   }
 
-  let data = mockData;  // 用全部历史记录渲染界面
+  const data = mockData;
 
-
-  // Step 2: 填充历史价格表格
+  // Step 2: 填历史价格表
   const tbody = document.querySelector("#history-table tbody");
-  tbody.innerHTML = ""; // 清空旧内容
+  tbody.innerHTML = "";
 
   data
     .slice()
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)) // 按时间从新到旧排序
-    .forEach(row => {
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .forEach((row) => {
       const tr = document.createElement("tr");
+      const storeBadgeClass =
+        row.website === "amazon.com" ? "pt-badge-amazon" : "pt-badge-walmart";
       tr.innerHTML = `
-        <td>${row.timestamp}</td>
-        <td>${row.website}</td>
-        <td>$${row.price.toFixed(2)}</td>
+        <td>${formatTime(row.timestamp)}</td>
+        <td><span class="${storeBadgeClass} px-2 py-1">${row.website.includes("amazon") ? "Amazon" : "Walmart"}</span></td>
+        <td>${PRODUCT_LABELS[row.itemName] || row.itemName}</td>
+        <td class="text-end">$${row.price.toFixed(2)}</td>
       `;
       tbody.appendChild(tr);
     });
 
-  // Step 3: 找每个网站“最新价格”
-  const latestBySite = {};
-  data.forEach(row => {
-    const site = row.website;
-    if (!latestBySite[site] || new Date(row.timestamp) > new Date(latestBySite[site].timestamp)) {
-      latestBySite[site] = row;
+  // Step 3: 找“每个网站 × 每个商品”的最新记录
+  const latestByKey = {};
+  data.forEach((row) => {
+    const key = `${row.website}-${row.itemName}`;
+    if (!latestByKey[key] || new Date(row.timestamp) > new Date(latestByKey[key].timestamp)) {
+      latestByKey[key] = row;
     }
   });
 
-  // Step 4: 显示当前价格卡片
+  // 按商品汇总
+  const groupedByItem = {};
+  Object.values(latestByKey).forEach((row) => {
+    if (!groupedByItem[row.itemName]) groupedByItem[row.itemName] = [];
+    groupedByItem[row.itemName].push(row);
+  });
+
+  // Step 4: 渲染商品卡片
   const currentDiv = document.getElementById("current-prices");
   currentDiv.innerHTML = "";
 
-  Object.values(latestBySite).forEach(row => {
+  PRODUCTS.forEach((productKey) => {
+    const rowsForItem = groupedByItem[productKey] || [];
+    if (rowsForItem.length === 0) return;
+
+    const displayName = PRODUCT_LABELS[productKey] || productKey;
+    const imageUrl = PRODUCT_IMAGES[productKey];
+
+    const latestTime = rowsForItem[0].timestamp;
+
+    const amazonRow = rowsForItem.find((r) => r.website === "amazon.com");
+    const walmartRow = rowsForItem.find((r) => r.website === "walmart.com");
+
+    const amazonPrice = amazonRow ? `$${amazonRow.price.toFixed(2)}` : "--";
+    const walmartPrice = walmartRow ? `$${walmartRow.price.toFixed(2)}` : "--";
+
     currentDiv.innerHTML += `
-      <div class="col-md-6 mb-3">
-        <div class="card p-3 shadow-sm">
-          <h5 class="card-title">${row.website}</h5>
-          <p class="card-text fs-4 mb-1">$${row.price.toFixed(2)}</p >
-          <p class="text-muted small mb-0">Last updated: ${row.timestamp}</p >
+      <div class="pt-product-card">
+        <div class="pt-product-image-wrapper">
+          <img src="${imageUrl}" alt="${displayName}">
+        </div>
+        <div class="pt-product-content">
+          <div>
+            <div class="pt-product-header">
+              <h3 class="pt-product-name">${displayName}</h3>
+              <span class="pt-trend-icon">↗</span>
+            </div>
+            <div class="pt-store-row">
+              <span>amazon.com</span>
+              <span class="pt-store-price">${amazonPrice}</span>
+            </div>
+            <div class="pt-store-row">
+              <span>walmart.com</span>
+              <span class="pt-store-price">${walmartPrice}</span>
+            </div>
+          </div>
+          <p class="pt-product-updated">Last updated: ${formatTime(latestTime)}</p >
         </div>
       </div>
     `;
   });
 
-  // Step 5: 刷新时间
+  // Step 5: 顶部“Dashboard refreshed at …”
   document.getElementById("last-updated").textContent =
     "Dashboard refreshed at: " + new Date().toISOString();
 }
 
+// 页面加载后自动运行 & 每 20 秒刷新
 document.addEventListener("DOMContentLoaded", () => {
-  loadPrices();                      // 先跑一次
-  setInterval(loadPrices, 20000);    // 之后每 20 秒跑一次
+  console.log("✅ script.js loaded");
+  loadPrices();
+  setInterval(loadPrices, 20000);
 });
