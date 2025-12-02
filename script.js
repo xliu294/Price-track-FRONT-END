@@ -2,9 +2,9 @@
 const USE_MOCK = true;
 
 // 1. SETUP: Define your Azure Function URL
-// If running locally, use http://localhost:7071/api/AddVendorItem
+// If running locally, use https://storestorageproject.z13.web.core.windows.net/vendor.html
 // If deployed to Azure, use your real https://<app-name>.azurewebsites.net/api/AddVendorItem
-const AZURE_API_URL = "http://localhost:7071/api/AddVendorItem";
+const AZURE_API_URL = "https://storestorageproject.z13.web.core.windows.net/vendor.html";
 
 // 初始价格
 let basePrices = {
