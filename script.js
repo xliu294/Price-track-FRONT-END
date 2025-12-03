@@ -2,7 +2,7 @@
 const USE_MOCK = true;
 
 // Azure 后端 API URL
-const AZURE_API_URL = "https://price-api-project.azurewebsites.net/api/AddVendorItem";
+const AZURE_API_URL = "https://data-ingestion-api-prod-cpcsewagdwfwa4en.northcentralus-01.azurewebsites.net/api/AddVendorItem";
 
 // 我们要展示的 4 个商品
 const PRODUCTS = ["Spam", "Eggs", "Milk", "Bread"];
